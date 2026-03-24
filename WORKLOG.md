@@ -14,6 +14,9 @@
 | 2026-03-25 00:18 | 新需求：维护夜间全量操作日志，并在阶段性节点同步到 GitHub | 在仓库根目录建立 `WORKLOG.md`，定义日志规范并初始化记录 | 日志机制已落地，后续将持续追加 |
 | 2026-03-25 00:19 | 需要形成第一个可审阅阶段节点 | 仅暂存 `WORKLOG.md` 并提交 `docs: initialize nightly work log` | 生成阶段提交 `ae13f2d` |
 | 2026-03-25 00:20 | 需要完成 GitHub 同步接入 | 检查 `gh` CLI 可用性（未安装），切换为原生 `git remote + git push` 方案 | 接入路径已确定，等待提供 GitHub 仓库 URL 后执行绑定与首推 |
+| 2026-03-25 00:23 | 用户提供 GitHub 仓库地址后，需要完成远端绑定 | 新增远端 `github=git@github.com:zilong1024/2026-03-25-Agent-.git`，并执行首推 | 首推被拒绝：远端 `main` 已有本地不存在提交（fetch first） |
+| 2026-03-25 00:24 | 本地与 GitHub 远端历史无共同祖先，无法快进推送 | 执行 `fetch github` 后使用 `--allow-unrelated-histories` 合并；`README.md` 出现 add/add 冲突时保留题目仓库版本并完成合并提交 | 生成合并提交 `6db916e`，历史已兼容 |
+| 2026-03-25 00:25 | 需要确认 GitHub 同步链路可用 | 再次执行 `git push -u github main` | 推送成功，`main` 已与 GitHub 建立跟踪关系 |
 
 ## 后续执行约束（从本条开始生效）
 - 每个阶段完成后先更新本日志，再执行 commit。
