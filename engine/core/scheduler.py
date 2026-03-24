@@ -1,3 +1,5 @@
+import json
+import re
 from collections import deque
 from typing import Any, Deque, Dict, Iterable, List, Set
 
@@ -39,12 +41,34 @@ class PipelineScheduler:
             return {key: self._resolve(item, context) for key, item in value.items()}
         if isinstance(value, list):
             return [self._resolve(item, context) for item in value]
-        if isinstance(value, str) and value.startswith("$"):
-            try:
-                return context.resolve_reference(value)
-            except Exception:
-                return value
+        if isinstance(value, str):
+            return self._resolve_string(value, context)
         return value
+
+    def _resolve_string(self, text: str, context: ExecutionContext) -> Any:
+        if text.startswith("$"):
+            try:
+                return context.resolve_reference(text)
+            except Exception:
+                return text
+
+        pattern = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*(?:\[['\"][^'\"]+['\"]\]|\[\d+\])*")
+        did_replace = False
+
+        def replace(match: Any) -> str:
+            nonlocal did_replace
+            reference = match.group(0)
+            try:
+                resolved = context.resolve_reference(reference)
+            except Exception:
+                return reference
+            did_replace = True
+            if isinstance(resolved, (dict, list)):
+                return json.dumps(resolved, ensure_ascii=False)
+            return str(resolved)
+
+        rendered = pattern.sub(replace, text)
+        return rendered if did_replace else text
 
     def _get_refs(self, step: Step) -> Set[str]:
         refs: Set[str] = set()

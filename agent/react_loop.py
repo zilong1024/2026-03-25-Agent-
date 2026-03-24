@@ -1,8 +1,9 @@
 import json
 import os
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from openai import AsyncOpenAI
+import httpx
 
 from ..engine.core.builder import PipelineBuilder
 from .tools import bind_builder, execute_tool, get_tool_specs
@@ -35,26 +36,20 @@ class ReactLoopAgent:
     def __init__(self, builder: Optional[PipelineBuilder] = None):
         self.builder = builder or PipelineBuilder()
         bind_builder(self.builder)
-        api_key = os.getenv("OPENAI_API_KEY")
-        self.client: Optional[AsyncOpenAI]
-        if api_key:
-            self.client = AsyncOpenAI(
-                api_key=api_key,
-                base_url=os.getenv("OPENAI_BASE_URL"),
-            )
-        else:
-            self.client = None
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.base_url = _normalize_base_url(os.getenv("OPENAI_BASE_URL"))
         self.model = os.getenv("REACT_MODEL", "gpt-4o-mini")
-        self.max_iters = int(os.getenv("REACT_MAX_ITERS", "12"))
-        self.max_no_tool_turns = int(os.getenv("REACT_MAX_NO_TOOL_TURNS", "3"))
-        self.max_tool_error_turns = int(os.getenv("REACT_MAX_TOOL_ERROR_TURNS", "4"))
+        self.max_iters = int(os.getenv("REACT_MAX_ITERS", "20"))
+        self.max_no_tool_turns = int(os.getenv("REACT_MAX_NO_TOOL_TURNS", "4"))
+        self.max_tool_error_turns = int(os.getenv("REACT_MAX_TOOL_ERROR_TURNS", "6"))
 
     async def run(self, prompt: str) -> Dict[str, Any]:
-        if self.client is None:
+        if not self.api_key:
             raise RuntimeError("ReactLoopAgent requires OPENAI_API_KEY before running planning loop")
 
         coordinator = _LoopCoordinator(
-            client=self.client,
+            api_key=self.api_key,
+            base_url=self.base_url,
             model=self.model,
             prompt=prompt,
             iteration_limit=self.max_iters,
@@ -68,15 +63,19 @@ class ReactLoopAgent:
 class _LoopCoordinator:
     def __init__(
         self,
-        client: AsyncOpenAI,
+        api_key: str,
+        base_url: str,
         model: str,
         prompt: str,
         iteration_limit: int,
         no_tool_limit: int,
         tool_error_limit: int,
     ) -> None:
-        self.client = client
+        self.api_key = api_key
+        self.base_url = base_url
         self.model = model
+        self.prompt_text = prompt
+        self.prompt_lower = prompt.lower()
         self.iteration_limit = iteration_limit
         self.no_tool_limit = max(1, no_tool_limit)
         self.tool_error_limit = max(1, tool_error_limit)
@@ -147,23 +146,108 @@ class _LoopCoordinator:
 
         return self.messages
 
-    async def _next_model_message(self) -> Any:
+    async def _next_model_message(self) -> "_AssistantReply":
         last_error: Optional[Exception] = None
         for _ in range(2):
             try:
-                completion = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=self.messages,
-                    tools=self._tool_specs,
-                    tool_choice="auto",
-                    temperature=0,
-                )
-                return completion.choices[0].message
+                return await self._request_model_message()
             except Exception as exc:
                 last_error = exc
         raise RuntimeError("chat completion failed: {0}".format(last_error))
 
-    async def _apply_requested_actions(self, tool_calls: List[Any]) -> Dict[str, Any]:
+    async def _request_model_message(self) -> "_AssistantReply":
+        endpoint = "{0}/chat/completions".format(self.base_url.rstrip("/"))
+        request_payload = {
+            "model": self.model,
+            "messages": self.messages,
+            "tools": self._tool_specs,
+            "tool_choice": "auto",
+            "temperature": 0,
+        }
+        headers = {
+            "Authorization": "Bearer {0}".format(self.api_key),
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(endpoint, headers=headers, json=request_payload)
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise RuntimeError("chat completion returned non-JSON response: {0}".format(exc))
+
+        if response.status_code >= 400:
+            error_block = payload.get("error", {}) if isinstance(payload, dict) else {}
+            if isinstance(error_block, dict):
+                error_text = error_block.get("message") or str(error_block)
+            else:
+                error_text = str(payload)
+            raise RuntimeError(
+                "chat completion request failed ({0}): {1}".format(response.status_code, error_text)
+            )
+
+        if not isinstance(payload, dict):
+            raise RuntimeError("chat completion response is not an object")
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise RuntimeError("chat completion returned empty choices")
+
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        message = first.get("message", {})
+        if not isinstance(message, dict):
+            raise RuntimeError("chat completion missing message payload")
+        return self._decode_assistant_message(message)
+
+    def _decode_assistant_message(self, message: Dict[str, Any]) -> "_AssistantReply":
+        raw_content = message.get("content")
+        content = self._normalize_content(raw_content)
+        tool_calls = self._decode_tool_calls(message.get("tool_calls"))
+        return _AssistantReply(content=content, tool_calls=tool_calls)
+
+    def _normalize_content(self, raw_content: Any) -> str:
+        if isinstance(raw_content, str):
+            return raw_content
+        if isinstance(raw_content, list):
+            parts: List[str] = []
+            for chunk in raw_content:
+                if not isinstance(chunk, dict):
+                    continue
+                text = chunk.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            return "".join(parts)
+        return ""
+
+    def _decode_tool_calls(self, raw_calls: Any) -> List["_ToolCall"]:
+        if not isinstance(raw_calls, list):
+            return []
+
+        decoded: List[_ToolCall] = []
+        for item in raw_calls:
+            if not isinstance(item, dict):
+                continue
+            function = item.get("function", {})
+            if not isinstance(function, dict):
+                continue
+
+            name = function.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+
+            arguments = function.get("arguments", "{}")
+            if isinstance(arguments, dict):
+                arguments = json.dumps(arguments, ensure_ascii=True)
+            if not isinstance(arguments, str):
+                arguments = "{}"
+
+            call_id = item.get("id")
+            if not isinstance(call_id, str) or not call_id:
+                call_id = "call_{0}".format(uuid.uuid4().hex[:12])
+
+            decoded.append(_ToolCall(call_id, name, arguments))
+        return decoded
+
+    async def _apply_requested_actions(self, tool_calls: List["_ToolCall"]) -> Dict[str, Any]:
         should_finish = False
         all_failed = True
         had_error = False
@@ -185,7 +269,17 @@ class _LoopCoordinator:
                 )
 
             if tool_call.function.name == "get_pipeline" and is_success:
-                should_finish = True
+                pipeline = result.get("pipeline", {})
+                missing_kinds = self._missing_kinds_for_prompt(pipeline)
+                if missing_kinds:
+                    had_error = True
+                    errors.append(
+                        "Pipeline exported too early; missing step kinds: {0}".format(
+                            ", ".join(missing_kinds)
+                        )
+                    )
+                else:
+                    should_finish = True
 
         return {
             "should_finish": should_finish,
@@ -194,7 +288,7 @@ class _LoopCoordinator:
             "errors": errors,
         }
 
-    async def _run_one_tool(self, tool_call: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    async def _run_one_tool(self, tool_call: "_ToolCall") -> Tuple[Dict[str, Any], Dict[str, Any]]:
         raw_arguments = tool_call.function.arguments or "{}"
         parsed_arguments, parse_error = self._parse_arguments(raw_arguments)
 
@@ -221,7 +315,7 @@ class _LoopCoordinator:
             {"role": "user", "content": prompt},
         ]
 
-    def _format_assistant_turn(self, message: Any) -> Dict[str, Any]:
+    def _format_assistant_turn(self, message: "_AssistantReply") -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "role": "assistant",
             "content": message.content or "",
@@ -230,7 +324,7 @@ class _LoopCoordinator:
             payload["tool_calls"] = [self._encode_tool_call(tool_call) for tool_call in message.tool_calls]
         return payload
 
-    def _encode_tool_call(self, tool_call: Any) -> Dict[str, Any]:
+    def _encode_tool_call(self, tool_call: "_ToolCall") -> Dict[str, Any]:
         return {
             "id": tool_call.id,
             "type": "function",
@@ -277,3 +371,64 @@ class _LoopCoordinator:
                 "Loop terminated by controller: {0}".format(reason)
             ),
         }
+
+    def _missing_kinds_for_prompt(self, pipeline: Any) -> List[str]:
+        if not isinstance(pipeline, dict):
+            return []
+        steps = pipeline.get("steps", [])
+        if not isinstance(steps, list):
+            return []
+
+        present_kinds = {
+            step.get("kind") for step in steps if isinstance(step, dict) and isinstance(step.get("kind"), str)
+        }
+
+        required: List[str] = []
+        if any(token in self.prompt_lower for token in ["market bars", "bars", "bar data", "行情"]):
+            required.append("data.market_bars")
+        if "momentum" in self.prompt_lower:
+            required.append("factor.momentum")
+        if any(token in self.prompt_lower for token in ["rank", "ranking", "排序"]):
+            required.append("factor.rank")
+        if any(token in self.prompt_lower for token in ["explain", "explanation", "解释", "说明"]):
+            required.append("research_chat")
+
+        if required:
+            required.insert(0, "trigger.manual")
+
+        seen = set()
+        ordered_required: List[str] = []
+        for kind in required:
+            if kind in seen:
+                continue
+            seen.add(kind)
+            ordered_required.append(kind)
+
+        return [kind for kind in ordered_required if kind not in present_kinds]
+
+
+class _ToolFunction:
+    def __init__(self, name: str, arguments: str) -> None:
+        self.name = name
+        self.arguments = arguments
+
+
+class _ToolCall:
+    def __init__(self, call_id: str, name: str, arguments: str) -> None:
+        self.id = call_id
+        self.function = _ToolFunction(name=name, arguments=arguments)
+
+
+class _AssistantReply:
+    def __init__(self, content: str, tool_calls: List[_ToolCall]) -> None:
+        self.content = content
+        self.tool_calls = tool_calls
+
+
+def _normalize_base_url(raw_base: Optional[str]) -> str:
+    if raw_base is None or not raw_base.strip():
+        return "https://api.openai.com/v1"
+    cleaned = raw_base.strip().rstrip("/")
+    if cleaned.endswith("/v1"):
+        return cleaned
+    return "{0}/v1".format(cleaned)

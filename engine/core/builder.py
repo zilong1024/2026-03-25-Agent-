@@ -1,3 +1,5 @@
+import json
+import re
 from typing import Any, Dict, List, Optional
 
 from .context import ExecutionContext
@@ -61,8 +63,8 @@ class PipelineBuilder:
             return {key: self._materialize_inputs(item) for key, item in value.items()}
         if isinstance(value, list):
             return [self._materialize_inputs(item) for item in value]
-        if self._is_reference(value):
-            return self._read_reference(value)
+        if isinstance(value, str):
+            return self._resolve_string(value)
         return value
 
     def _is_reference(self, value: Any) -> bool:
@@ -73,6 +75,27 @@ class PipelineBuilder:
             return self._runtime.resolve_reference(reference)
         except Exception:
             return reference
+
+    def _resolve_string(self, text: str) -> Any:
+        if self._is_reference(text):
+            return self._read_reference(text)
+
+        pattern = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*(?:\[['\"][^'\"]+['\"]\]|\[\d+\])*")
+        did_replace = False
+
+        def replace(match: Any) -> str:
+            nonlocal did_replace
+            reference = match.group(0)
+            resolved = self._read_reference(reference)
+            if resolved == reference:
+                return reference
+            did_replace = True
+            if isinstance(resolved, (dict, list)):
+                return json.dumps(resolved, ensure_ascii=False)
+            return str(resolved)
+
+        rendered = pattern.sub(replace, text)
+        return rendered if did_replace else text
 
     def snapshot_step_ids(self) -> List[str]:
         return list(self._draft_steps.keys())
