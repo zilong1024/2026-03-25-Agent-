@@ -17,6 +17,10 @@
 | 2026-03-25 00:23 | 用户提供 GitHub 仓库地址后，需要完成远端绑定 | 新增远端 `github=git@github.com:zilong1024/2026-03-25-Agent-.git`，并执行首推 | 首推被拒绝：远端 `main` 已有本地不存在提交（fetch first） |
 | 2026-03-25 00:24 | 本地与 GitHub 远端历史无共同祖先，无法快进推送 | 执行 `fetch github` 后使用 `--allow-unrelated-histories` 合并；`README.md` 出现 add/add 冲突时保留题目仓库版本并完成合并提交 | 生成合并提交 `6db916e`，历史已兼容 |
 | 2026-03-25 00:25 | 需要确认 GitHub 同步链路可用 | 再次执行 `git push -u github main` | 推送成功，`main` 已与 GitHub 建立跟踪关系 |
+| 2026-03-25 00:27 | 开始做题前需要建立基线并确认失败点 | 执行 `python3 tests/run_tests.py` 与 `python3 test.py`，结合代码阅读定位 mock 节点与 loop 弱点 | 基线确认为 `01_manual` 通过、`02_bars` 因 mock 失败；`test.py` 导入路径错误 |
+| 2026-03-25 00:33 | 需要完成 Workstream 1/2/3 的核心改造 | 实现 `market_bars` 的 BaoStock 查询+本地回退、实现 `research_chat` 真 API 调用、增强 `react_loop` 终止与恢复策略、补强 `tools/catalog` 元数据与校验 | 关键功能改造完成并通过编译检查 |
+| 2026-03-25 00:38 | 回归测试异常耗时，疑似运行卡死 | 逐步缩小范围后定位为 `market_bars` 中 `asyncio.to_thread` 在当前环境下阻塞；改为同步执行路径 | 阻塞解除，测试恢复可运行 |
+| 2026-03-25 00:41 | 需要完成最终验证与可读性收尾 | 重跑 `python3 tests/run_tests.py`、修复 `test.py` 包导入并改进缺少 API Key 的报错、补充 `.gitignore` 忽略缓存文件 | 公共测试 `2/2` 通过；`test.py` 从导入报错升级为清晰环境报错 |
 
 ## 后续执行约束（从本条开始生效）
 - 每个阶段完成后先更新本日志，再执行 commit。

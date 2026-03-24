@@ -19,12 +19,14 @@ class _StepDescriptor:
         purpose: str,
         required_fields: List[str],
         sample: Dict[str, Any],
+        field_guide: Dict[str, str],
         notes: List[str],
     ) -> None:
         self.kind = kind
         self.purpose = purpose
         self.required_fields = required_fields
         self.sample = sample
+        self.field_guide = field_guide
         self.notes = notes
 
     def summary(self) -> Dict[str, Any]:
@@ -33,10 +35,12 @@ class _StepDescriptor:
             "purpose": self.purpose,
             "required_fields": list(self.required_fields),
             "example_config": dict(self.sample),
+            "field_guide": dict(self.field_guide),
         }
 
     def details(self) -> Dict[str, Any]:
         payload = self.summary()
+        payload["reference_syntax"] = "$step_id['field']"
         payload["notes"] = list(self.notes)
         return payload
 
@@ -51,6 +55,9 @@ _DESCRIPTORS = [
         purpose="Seed the draft with initial input values.",
         required_fields=[],
         sample={"universe": ["AAPL", "MSFT", "NVDA"]},
+        field_guide={
+            "universe": "List[str]. Symbols used by downstream data fetch steps.",
+        },
         notes=[
             "Usually the first step in a draft.",
             "Its output can be referenced later with $step_id['field'].",
@@ -61,8 +68,12 @@ _DESCRIPTORS = [
         purpose="Fetch grouped daily bar series for one or more symbols.",
         required_fields=["symbols"],
         sample={"symbols": "$trigger_manual['universe']", "lookback_days": 5},
+        field_guide={
+            "symbols": "List[str] or reference to a list, e.g. $trigger_manual['universe'].",
+            "lookback_days": "Positive integer, typically 3-60.",
+        },
         notes=[
-            "The implementation is intentionally a mock before the interview task is completed.",
+            "Returns symbol -> list[{date, close}] for downstream factors.",
             "Return value should be a symbol -> bars mapping.",
         ],
     ),
@@ -71,6 +82,10 @@ _DESCRIPTORS = [
         purpose="Compute a momentum score map from grouped bars.",
         required_fields=["bars"],
         sample={"bars": "$data_market_bars", "window": 3},
+        field_guide={
+            "bars": "Mapping symbol -> list of bar items with close price.",
+            "window": "Integer >= 2. Uses the last N closes per symbol.",
+        },
         notes=[
             "The node expects grouped bars, not a single list of candles.",
             "Downstream rank steps usually consume the scores field.",
@@ -81,6 +96,10 @@ _DESCRIPTORS = [
         purpose="Order symbols using a score mapping.",
         required_fields=["values"],
         sample={"values": "$factor_momentum['scores']", "descending": True},
+        field_guide={
+            "values": "Mapping symbol -> numeric score, often from momentum.scores.",
+            "descending": "Boolean. True means highest score first.",
+        },
         notes=[
             "Descending true means highest score first.",
             "The node returns ordered rows and a top-symbol list.",
@@ -91,8 +110,12 @@ _DESCRIPTORS = [
         purpose="Generate a natural-language note about the research output.",
         required_fields=["prompt"],
         sample={"prompt": "Explain this momentum ranking: $factor_rank['ordered']"},
+        field_guide={
+            "prompt": "String. Be explicit about which upstream result to explain.",
+            "model": "Optional model override; defaults to environment/runtime default.",
+        },
         notes=[
-            "This node is also a mock in the starter repo.",
+            "Uses a chat-completions API and returns {content, model, ...}.",
             "Keep the prompt explicit about which upstream result should be described.",
         ],
     ),

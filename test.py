@@ -7,8 +7,8 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agent.react_loop import ReactLoopAgent
-from engine.core.engine import PipelineEngine
+from quant_react_interview.agent.react_loop import ReactLoopAgent
+from quant_react_interview.engine.core.engine import PipelineEngine
 
 
 PROMPT = "Use the market bars to compute momentum, rank the symbols by momentum, and then explain the ranking."
