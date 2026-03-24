@@ -26,6 +26,7 @@
 | 2026-03-25 00:56 | 需要解决 SDK 兼容导致的 API 调用失败 | 将 `react_loop` 与 `research_chat` 改为 `httpx` 直连 OpenAI-Compatible 接口，并补充 base_url 归一化与错误解析 | DeepSeek API 调用恢复可用，公共测试仍 `2/2` 通过 |
 | 2026-03-25 01:00 | 端到端执行中遇到 A 股符号数据抓取失败 | 根据报错安装缺失依赖 `baostock`，并重新执行 DeepSeek smoke | BaoStock 登录与行情查询恢复可用 |
 | 2026-03-25 01:06 | 需要提升规划闭环稳定性（避免过早结束） | 在 loop 增加“按 prompt 语义检查缺失 step kind”的终止门槛，并提高默认迭代预算；同时补齐运行时嵌入式引用插值解析 | 最新 smoke 结果为完整 5 步链路：`trigger -> market_bars -> momentum -> rank -> research_chat`，执行成功 |
+| 2026-03-25 01:12 | 需要将本轮 DeepSeek 适配成果同步到 GitHub | 提交 `feat: adapt chat runtime for deepseek and strengthen completion checks`（`23b7628`）并推送到 `github/main` | 本轮改造已完成远端同步，可直接审阅 |
 
 ## 后续执行约束（从本条开始生效）
 - 每个阶段完成后先更新本日志，再执行 commit。
