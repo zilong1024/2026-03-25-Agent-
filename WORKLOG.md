@@ -21,6 +21,7 @@
 | 2026-03-25 00:33 | 需要完成 Workstream 1/2/3 的核心改造 | 实现 `market_bars` 的 BaoStock 查询+本地回退、实现 `research_chat` 真 API 调用、增强 `react_loop` 终止与恢复策略、补强 `tools/catalog` 元数据与校验 | 关键功能改造完成并通过编译检查 |
 | 2026-03-25 00:38 | 回归测试异常耗时，疑似运行卡死 | 逐步缩小范围后定位为 `market_bars` 中 `asyncio.to_thread` 在当前环境下阻塞；改为同步执行路径 | 阻塞解除，测试恢复可运行 |
 | 2026-03-25 00:41 | 需要完成最终验证与可读性收尾 | 重跑 `python3 tests/run_tests.py`、修复 `test.py` 包导入并改进缺少 API Key 的报错、补充 `.gitignore` 忽略缓存文件 | 公共测试 `2/2` 通过；`test.py` 从导入报错升级为清晰环境报错 |
+| 2026-03-25 00:46 | 需要将本阶段成果同步到 GitHub 供次日审阅 | 提交 `feat: implement integrations and harden planning reliability`（`3bc23c5`）并推送到 `github/main` | 代码阶段成果已完成远端同步，可直接审阅 |
 
 ## 后续执行约束（从本条开始生效）
 - 每个阶段完成后先更新本日志，再执行 commit。
