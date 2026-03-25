@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quant React Interview 执行流程图</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --sub: #334155;
+      --line: #cbd5e1;
+      --accent: #0ea5e9;
+      --accent-2: #14b8a6;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 0%, #dbeafe 0%, transparent 40%),
+        radial-gradient(circle at 90% 20%, #ccfbf1 0%, transparent 35%),
+        var(--bg);
+    }
+    .wrap {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 28px 16px 40px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      letter-spacing: 0.2px;
+    }
+    p.lead {
+      margin: 0 0 20px;
+      color: var(--sub);
+      line-height: 1.6;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+    .flow {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .box {
+      min-width: 160px;
+      flex: 1 1 180px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .box strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #0b5d7a;
+    }
+    .arrow {
+      font-size: 20px;
+      color: #64748b;
+      padding: 0 2px;
+    }
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .agent { background: var(--accent); }
+    .runtime { background: var(--accent-2); }
+    .debug { background: var(--warn); }
+    code {
+      background: #e2e8f0;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 10px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #fff;
+    }
+    .step h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+    .step p {
+      margin: 0;
+      color: var(--sub);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Quant React Interview 执行流程图</h1>
+    <p class="lead">把项目当成两段流水线：先由 Agent 组装 Pipeline，再由 Runtime 执行 Pipeline。调试时建议先看 Runtime，再看 Agent。</p>
+
+    <section class="panel">
+      <h2>一、全局主流程</h2>
+      <div class="flow">
+        <div class="box"><strong>Prompt 输入</strong><span><code>test.py</code> 里的 <code>PROMPT</code></span></div>
+        <div class="arrow">→</div>
+        <div class="box"><strong>Agent 规划</strong><span><code>ReactLoopAgent.run()</code></span></div>
+        <div class="arrow">→</div>
+        <div class="box"><strong>生成 Pipeline</strong><span>JSON steps + next + config</span></div>
+        <div class="arrow">→</div>
+        <div class="box"><strong>Runtime 执行</strong><span><code>PipelineEngine.run_pipeline()</code></span></div>
+        <div class="arrow">→</div>
+        <div class="box"><strong>最终输出</strong><span><code>run_result["outputs"]</code></span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>二、Agent 内部时序</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="tag agent">Agent</span>
+          <h3>1) 建立对话上下文</h3>
+          <p>system prompt + user prompt，准备 tools schema。</p>
+        </div>
+        <div class="step">
+          <span class="tag agent">Agent</span>
+          <h3>2) 调用模型</h3>
+          <p>请求 <code>/chat/completions</code>，让模型决定是否发起 tool calls。</p>
+        </div>
+        <div class="step">
+          <span class="tag agent">Agent</span>
+          <h3>3) 执行工具</h3>
+          <p><code>add_step/update_step/connect_steps/get_catalog/get_details/get_pipeline</code>。</p>
+        </div>
+        <div class="step">
+          <span class="tag agent">Agent</span>
+          <h3>4) 错误修复与终止</h3>
+          <p>遇到失败会注入 repair hint，达到上限或 <code>get_pipeline</code> 成功后结束。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>三、Runtime 执行时序</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="tag runtime">Runtime</span>
+          <h3>1) 解析与校验 DSL</h3>
+          <p>读取 YAML/Dict，校验 step id 唯一性与依赖合法性。</p>
+        </div>
+        <div class="step">
+          <span class="tag runtime">Runtime</span>
+          <h3>2) 构建依赖图</h3>
+          <p>同时识别 <code>next</code> 边和 <code>$step_id['field']</code> 引用依赖。</p>
+        </div>
+        <div class="step">
+          <span class="tag runtime">Runtime</span>
+          <h3>3) 分批执行就绪节点</h3>
+          <p>解析 config 引用后执行节点，把输出写入 context。</p>
+        </div>
+        <div class="step">
+          <span class="tag runtime">Runtime</span>
+          <h3>4) 汇总 outputs</h3>
+          <p>返回 <code>{ status: "success", outputs: ... }</code>。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>四、推荐调试顺序</h2>
+      <div class="legend">
+        <div class="step">
+          <span class="tag debug">调试</span>
+          <h3>Step A</h3>
+          <p>先跑 <code>python3 tests/run_tests.py</code>，确保 Runtime 底层正常。</p>
+        </div>
+        <div class="step">
+          <span class="tag debug">调试</span>
+          <h3>Step B</h3>
+          <p>跑 <code>python3 教程/step_by_step_debug.py examples/momentum_pipeline.yaml</code>，逐步看输入输出。</p>
+        </div>
+        <div class="step">
+          <span class="tag debug">调试</span>
+          <h3>Step C</h3>
+          <p>最后跑 <code>python3 test.py</code>，验证 Agent + Runtime 全链路。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

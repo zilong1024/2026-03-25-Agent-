@@ -30,6 +30,7 @@
 | 2026-03-25 01:06 | 需要提升规划闭环稳定性（避免过早结束）              | 在 loop 增加“按 prompt 语义检查缺失 step kind”的终止门槛，并提高默认迭代预算；同时补齐运行时嵌入式引用插值解析                                              | 最新 smoke 结果为完整 5 步链路：`trigger -> market_bars -> momentum -> rank -> research_chat`，执行成功 |
 | 2026-03-25 01:12 | 需要将本轮 DeepSeek 适配成果同步到 GitHub    | 提交 `feat: adapt chat runtime for deepseek and strengthen completion checks`（`23b7628`）并推送到 `github/main`          | 本轮改造已完成远端同步，可直接审阅                                                                       |
 | 2026-03-25 14:33 | 需要让本地直接可用 DeepSeek 配置             | 将 `OPENAI_API_KEY/OPENAI_BASE_URL/REACT_MODEL/OPENAI_MODEL/RESEARCH_CHAT_MODEL` 写入 `~/.bashrc` 并校验生效（Key 脱敏核验）        | 新开终端可直接继承环境变量；当前核验值为 `OPENAI_API_KEY='sk-919***2d3a'`                                |
+| 2026-03-25 15:06 | 需要为初学者提供可视化的逐步调试材料 | 新建 `教程/` 目录，编写 `README.md` 导航、`01_一步一步调试.md` 教程、`流程图.html` 可视化流程图，并新增 `step_by_step_debug.py` 逐步执行脚本 | 已形成可读+可跑的教学资产，支持按 step 查看依赖/输入/输出 |
 
 
 ## 后续执行约束（从本条开始生效）
